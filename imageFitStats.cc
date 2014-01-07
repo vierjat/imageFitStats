@@ -1,10 +1,7 @@
-#include <string.h>
-#include <stdio.h>
-#include "fitsio.h"
-
 #include <iostream>
 #include <sstream>
-
+#include <string.h>
+#include <stdio.h>
 #include <sys/time.h>
 #include <time.h>
 #include <inttypes.h>
@@ -18,16 +15,24 @@
 #include <cmath>
 #include <iomanip>
 
+#include "TF1.h"
+#include "TFile.h"
+#include "TCanvas.h"
+#include "TH1F.h"
+#include "TH2F.h"
+#include "TGraph.h"
+#include "TNtuple.h"
+#include "TStyle.h"
+#include "TText.h"
+#include "TApplication.h"
+#include "TFitResultPtr.h"
+#include "TFitResult.h"
+
+#include "fitsio.h"
+
 #include "globalConstants.h"
 
 using namespace std;
-
-int deleteFile(const char *fileName){
-  cout << yellow;
-  cout << "Will overwrite: " << fileName << endl << endl;
-  cout << normal;
-  return unlink(fileName);
-}
 
 bool fileExist(const char *fileName){
   ifstream in(fileName,ios::in);
@@ -70,22 +75,18 @@ void showProgress(unsigned int currEvent, unsigned int nEvent) {
 }
 
 
-void printCopyHelp(const char *exeName, bool printFullHelp=false){
+void printHelp(const char *exeName, bool printFullHelp=true){
   
   if(printFullHelp){
     cout << bold;
     cout << endl;
-    cout << "This program computes the median images from N input fit files.\n";
-    cout << "It handles all the available HDUs. The HDUs in the output fit file\n";
-    cout << "will be:\n";
-    cout << " * float (32bits) for:  int8, int16, int32 and float input images\n";
-    cout << " * double (64bits) for: double input images\n";
+    cout << "This program computes the mean and the sigma of the pedestal for a given rectangular region.\n";
     cout << normal;
   }
   cout << "==========================================================================\n";
   cout << yellow;
   cout << "\nUsage:\n";
-  cout << "  "   << exeName << " <input file 1> .. <input file N> -o <output filename> [-v for verbosity] \n\n";
+  cout << "\t" << exeName << " <fits file name> Xmin Ymin  Xmax Ymax \n";
   cout << normal;
   cout << blue;
   cout << "For any problems or bugs contact Javier Tiffenberg <javiert@fnal.gov>\n\n";
@@ -93,76 +94,40 @@ void printCopyHelp(const char *exeName, bool printFullHelp=false){
   cout << "==========================================================================\n\n";
 }
 
-string bitpix2TypeName(int bitpix){
+
+void computeParameters(const double* sArray, const long npix, double &mean, double &sigma){
   
-  string typeName;
-  switch(bitpix) {
-      case BYTE_IMG:
-          typeName = "BYTE(8 bits)";
-          break;
-      case SHORT_IMG:
-          typeName = "SHORT(16 bits)";
-          break;
-      case LONG_IMG:
-          typeName = "INT(32 bits)";
-          break;
-      case FLOAT_IMG:
-          typeName = "FLOAT(32 bits)";
-          break;
-      case DOUBLE_IMG:
-          typeName = "DOUBLE(64 bits)";
-          break;
-      default:
-          typeName = "UNKNOWN";
-  }
-  return typeName;
+  TNtuple pixNT("pixels","pixels","pix");
+  
+  for(long c=0;c<npix;++c) pixNT.Fill(sArray[c]);
+  
+  pixNT.Draw("pix","","goff");
+  
+  Double_t meanAll = pixNT.GetHistogram()->GetMean();
+  Double_t sigmaAll = pixNT.GetHistogram()->GetRMS();
+  
+  ostringstream range1OSS;
+  range1OSS << "TMath::Abs(pix-" << meanAll << ")<" << sigmaAll;
+  
+  pixNT.Draw("pix",range1OSS.str().c_str(),"goff");
+  
+  TFitResultPtr firstFit = pixNT.GetHistogram()->Fit("gaus","S Q");
+  
+  Double_t meanRange1 = firstFit->Parameter(1);
+  Double_t sigmaRange1 = firstFit->Parameter(2);
+  
+  TCanvas c;
+  ostringstream range2OSS;
+  range2OSS << "TMath::Abs(pix-" << meanRange1 << ")<" << sigmaRange1*3;
+  pixNT.Draw("pix",range2OSS.str().c_str(),"");
+  TFitResultPtr secondFit = pixNT.GetHistogram()->Fit("gaus","S Q");
+  
+  mean  = secondFit->Parameter(1);
+  sigma = secondFit->Parameter(2);
+  c.WaitPrimitive();
+  
+  return;
 }
-
-
-void sortAndComputeMedian( vector< vector <double> > &vLinePix, vector<double> &vMedian ){
-  
-  int npix = vLinePix.size();
-  vMedian.clear();
-  vMedian.resize( npix );
-  
-  for(int c=0;c<npix;++c) std::sort(vLinePix[c].begin(), vLinePix[c].end());
-  int nElementsPerPix = vLinePix[0].size();
-  bool isOdd = !!(nElementsPerPix & 1);
-  
-  int m = nElementsPerPix/2;
-  if( isOdd )
-    for(int c=0;c<npix;++c) vMedian[c] = vLinePix[c][m];
-  else{
-    for(int c=0;c<npix;++c){
-      vMedian[c] = ( vLinePix[c][m-1] + vLinePix[c][m] )/2.;
-    }
-  }
-
-}
-
-
-double computeMean(const double* sArray, const long npix){
-  
-  double sum=0;
-  for(long c=0;c<npix;++c) sum+=sArray[c];
-  return sum/npix;
-}
-
-double computeSigma(const double* sArray, const long npix){
-  
-  double sum=0;
-  for(long c=0;c<npix;++c) sum+=sArray[c];
-  double mean = sum/npix;
-  
-  double var=0;
-  for(long c=0;c<npix;++c){
-    double diff=(sArray[c]-mean);
-    var+=diff*diff;
-  }
-  var/=npix;
-  return sqrt(var);
-}
-
 
 struct ext_t{
   int e;
@@ -195,10 +160,6 @@ int computeStats(string inFile, int xMin, int yMin, int xMax, int yMax){
 //     single = 1; /* Copy only a single HDU if a specific extension was given */
 //   }
   
-  
- 
-  
-  const int nHDUsToProcess = (single>0)? 1 : nhdu;
   
   for (int n=1; n<=nhdu; ++n)  /* Main loop through each extension */
   {
@@ -244,8 +205,7 @@ int computeStats(string inFile, int xMin, int yMin, int xMax, int yMax){
       if (status != 0){
         return(status);
       }
-      mean1 = computeMean(sArray,npix);
-      sigma1 = computeSigma(sArray,npix);
+      computeParameters(sArray,npix, mean1, sigma1);
       delete[] sArray;
     }
     
@@ -330,6 +290,8 @@ int processCommandLineArgs(const int argc, char *argv[], int &singleHdu, vector<
 
 int main(int argc, char *argv[])
 {
+  
+  TApplication myapp("myapp", 0, 0);
   
   checkArch(); //Check the size of the double and float variables.
   

@@ -1,8 +1,8 @@
 CFITSIO = $(FITSIOROOT)
 CPP = g++
 CC = gcc
-CFLAGS = -Wall -I$(CFITSIO) 
-LIBS = -L$(CFITSIO) -lcfitsio -lm 
+CFLAGS = -Wall -I$(CFITSIO) $(shell root-config --cflags)
+LIBS = -L$(CFITSIO) -lcfitsio -lm $(shell root-config --libs)
 GLIBS = 
 GLIBS += 
 OBJECTS = imageFitStats.o 
