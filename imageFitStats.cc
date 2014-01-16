@@ -100,7 +100,8 @@ void computeParameters(const double* sArray, const long npix, double &mean, doub
   TNtuple pixNT("pixels","pixels","pix");
   
   for(long c=0;c<npix;++c) pixNT.Fill(sArray[c]);
-  
+
+  TCanvas c;  
   pixNT.Draw("pix","","goff");
   
   Double_t meanAll = pixNT.GetHistogram()->GetMean();
