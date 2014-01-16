@@ -116,7 +116,7 @@ void computeParameters(const double* sArray, const long npix, double &mean, doub
   Double_t meanRange1 = firstFit->Parameter(1);
   Double_t sigmaRange1 = firstFit->Parameter(2);
   
-  TCanvas c;
+//  TCanvas c;
   ostringstream range2OSS;
   range2OSS << "TMath::Abs(pix-" << meanRange1 << ")<" << sigmaRange1*3;
   pixNT.Draw("pix",range2OSS.str().c_str(),"");
@@ -124,7 +124,7 @@ void computeParameters(const double* sArray, const long npix, double &mean, doub
   
   mean  = secondFit->Parameter(1);
   sigma = secondFit->Parameter(2);
-  c.WaitPrimitive();
+//  c.WaitPrimitive();
   
   return;
 }
