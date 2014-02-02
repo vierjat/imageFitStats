@@ -101,7 +101,7 @@ void computeParameters(const double* sArray, const long npix, double &mean, doub
   
   for(long c=0;c<npix;++c) pixNT.Fill(sArray[c]);
 
-  TCanvas c;  
+//  TCanvas c;  
   pixNT.Draw("pix","","goff");
   
   Double_t meanAll = pixNT.GetHistogram()->GetMean();
@@ -120,7 +120,7 @@ void computeParameters(const double* sArray, const long npix, double &mean, doub
 //  TCanvas c;
   ostringstream range2OSS;
   range2OSS << "TMath::Abs(pix-" << meanRange1 << ")<" << sigmaRange1*3;
-  pixNT.Draw("pix",range2OSS.str().c_str(),"");
+  pixNT.Draw("pix",range2OSS.str().c_str(),"goff");
   TFitResultPtr secondFit = pixNT.GetHistogram()->Fit("gaus","S Q");
   
   mean  = secondFit->Parameter(1);
